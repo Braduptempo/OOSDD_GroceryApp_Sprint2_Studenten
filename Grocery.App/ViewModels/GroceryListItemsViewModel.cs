@@ -4,6 +4,7 @@ using Grocery.App.Views;
 using Grocery.Core.Interfaces.Services;
 using Grocery.Core.Models;
 using System.Collections.ObjectModel;
+using Grocery.Core.Data.Repositories;
 
 namespace Grocery.App.ViewModels
 {
@@ -34,10 +35,20 @@ namespace Grocery.App.ViewModels
 
         private void GetAvailableProducts()
         {
-            //Maak de lijst AvailableProducts leeg
-            //Haal de lijst met producten op
-            //Controleer of het product al op de boodschappenlijst staat, zo niet zet het in de AvailableProducts lijst
-            //Houdt rekening met de voorraad (als die nul is kun je het niet meer aanbieden).            
+            AvailableProducts.Clear();
+            
+            var productRepository = new ProductRepository();
+            
+            foreach (var product in productRepository.GetAll())
+            {
+                if (product.Stock <= 0 ) continue;
+                var alreadyInList = MyGroceryListItems.Any(item => item.ProductId == product.Id);
+
+                if (!alreadyInList)
+                {
+                    AvailableProducts.Add(product);
+                }
+            }
         }
 
         partial void OnGroceryListChanged(GroceryList value)
@@ -54,12 +65,29 @@ namespace Grocery.App.ViewModels
         [RelayCommand]
         public void AddProduct(Product product)
         {
-            //Controleer of het product bestaat en dat de Id > 0
-            //Maak een GroceryListItem met Id 0 en vul de juiste productid en grocerylistid
-            //Voeg het GroceryListItem toe aan de dataset middels de _groceryListItemsService
-            //Werk de voorraad (Stock) van het product bij en zorg dat deze wordt vastgelegd (middels _productService)
-            //Werk de lijst AvailableProducts bij, want dit product is niet meer beschikbaar
-            //call OnGroceryListChanged(GroceryList);
+            if (product == null || product.Id == 0) return;
+            if (GroceryList == null || GroceryList.Id == 0) return;
+            
+            var groceryListItem = new GroceryListItem(
+                0,
+                GroceryList.Id,
+                product.Id,
+                1
+            );
+            _groceryListItemsService.Add(groceryListItem);
+
+            product.Stock -= 1;
+            _productService.Update(product);
+
+            if (product.Stock <= 0)
+            {
+                var toRemove = AvailableProducts.FirstOrDefault(p => p.Id == product.Id);
+                if (toRemove != null)
+                {
+                    AvailableProducts.Remove(toRemove);
+                }
+            }
+            OnGroceryListChanged(GroceryList);
         }
     }
 }
